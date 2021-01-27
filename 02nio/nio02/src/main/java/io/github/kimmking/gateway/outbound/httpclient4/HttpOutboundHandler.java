@@ -1,9 +1,11 @@
 package io.github.kimmking.gateway.outbound.httpclient4;
 
 
+import com.alibaba.fastjson.JSONObject;
 import io.github.kimmking.gateway.filter.HeaderHttpResponseFilter;
 import io.github.kimmking.gateway.filter.HttpRequestFilter;
 import io.github.kimmking.gateway.filter.HttpResponseFilter;
+import io.github.kimmking.gateway.outbound.utils.Httputils;
 import io.github.kimmking.gateway.router.HttpEndpointRouter;
 import io.github.kimmking.gateway.router.RandomHttpEndpointRouter;
 import io.netty.buffer.Unpooled;
@@ -42,9 +44,9 @@ public class HttpOutboundHandler {
     HttpEndpointRouter router = new RandomHttpEndpointRouter();
 
     public HttpOutboundHandler(List<String> backends) {
-
+        System.out.println("backendsList = "+ JSONObject.toJSONString(backends));
         this.backendUrls = backends.stream().map(this::formatUrl).collect(Collectors.toList());
-
+        System.out.println("backendUrls After = "+ JSONObject.toJSONString(backendUrls));
         int cores = Runtime.getRuntime().availableProcessors();
         long keepAliveTime = 1000;
         int queueSize = 2048;
@@ -76,9 +78,20 @@ public class HttpOutboundHandler {
         String backendUrl = router.route(this.backendUrls);
         final String url = backendUrl + fullRequest.uri();
         filter.filter(fullRequest, ctx);
-        proxyService.submit(()->fetchGet(fullRequest, ctx, url));
+        proxyService.submit(()->httpUtile(fullRequest, ctx, url));
     }
-    
+    private void httpUtile(final FullHttpRequest inbound, final ChannelHandlerContext ctx, final String url)  {
+        try {
+            HttpResponse result = Httputils.doGetJson(url,new JSONObject());
+            System.out.println("result = "+ result);
+            handleResponse(inbound, ctx, result);
+        }catch (Exception e) {
+            e.printStackTrace();
+        }
+
+    }
+
+
     private void fetchGet(final FullHttpRequest inbound, final ChannelHandlerContext ctx, final String url) {
         final HttpGet httpGet = new HttpGet(url);
         //httpGet.setHeader(HTTP.CONN_DIRECTIVE, HTTP.CONN_CLOSE);
@@ -117,8 +130,8 @@ public class HttpOutboundHandler {
 //            response = new DefaultFullHttpResponse(HTTP_1_1, OK, Unpooled.wrappedBuffer(value.getBytes("UTF-8")));
 //            response.headers().set("Content-Type", "application/json");
 //            response.headers().setInt("Content-Length", response.content().readableBytes());
-    
-    
+
+
             byte[] body = EntityUtils.toByteArray(endpointResponse.getEntity());
 //            System.out.println(new String(body));
 //            System.out.println(body.length);
@@ -158,6 +171,6 @@ public class HttpOutboundHandler {
         cause.printStackTrace();
         ctx.close();
     }
-    
+
     
 }
